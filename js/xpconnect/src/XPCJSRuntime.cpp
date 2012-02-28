@@ -1220,10 +1220,11 @@ GetCompartmentNameHelper(JSContext *cx, JSCompartment *c, bool getAddress)
         if (principals->codebase) {
             name->Assign(principals->codebase);
 
-            // If it's the system compartment and |getAddress| is true, append
-            // the address.  This means that multiple system compartments (and
-            // there can be many) can be distinguished.
-            if (getAddress && js::IsSystemCompartment(c)) {
+            // For system compartments we append the location, if there is one.
+            // And we append the address if |getAddress| is true, so that
+            // multiple system compartments (and there can be many) can be
+            // distinguished.
+            if (js::IsSystemCompartment(c)) {
                 xpc::CompartmentPrivate *compartmentPrivate =
                     static_cast<xpc::CompartmentPrivate*>(JS_GetCompartmentPrivate(cx, c));
                 if (compartmentPrivate &&
@@ -1232,10 +1233,12 @@ GetCompartmentNameHelper(JSContext *cx, JSCompartment *c, bool getAddress)
                     name->Append(compartmentPrivate->location);
                 }
 
-                // ample; 64-bit address max is 18 chars
-                static const int maxLength = 31;
-                nsPrintfCString address(maxLength, ", 0x%llx", PRUint64(c));
-                name->Append(address);
+                if (getAddress) {
+                    // ample; 64-bit address max is 18 chars
+                    static const int maxLength = 31;
+                    nsPrintfCString address(maxLength, ", 0x%llx", PRUint64(c));
+                    name->Append(address);
+                }
             }
 
             // A hack: replace forward slashes with '\\' so they aren't
@@ -1680,6 +1683,11 @@ ReportJSRuntimeExplicitTreeStats(const JS::RuntimeStats &rtStats, const nsACStri
                       "Memory used for the JS call stack.  This is the committed portion "
                       "of the stack; the uncommitted portion is not measured because it "
                       "hardly costs anything.",
+                      callback, closure);
+
+    ReportMemoryBytes(pathPrefix + NS_LITERAL_CSTRING("runtime/gc-marker"),
+                      nsIMemoryReporter::KIND_NONHEAP, rtStats.runtimeGCMarker,
+                      "Memory used for the GC mark stack and gray roots.",
                       callback, closure);
 
     ReportGCHeapBytes(pathPrefix +
